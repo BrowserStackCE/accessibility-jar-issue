@@ -1,0 +1,6 @@
+userName:
+accessKey:
+framework: cucumber-junit4
+build: JP-AccessibilityTest
+accessibility: false
+logLevel: debug
