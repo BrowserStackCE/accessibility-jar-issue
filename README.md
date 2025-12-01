@@ -33,6 +33,24 @@ Running on Windows PowerShell
 
 - The `run.ps1` script builds an explicit Maven classpath (cp.txt) and runs two JVMs by default (a no-agent sanity run, then an agent-enabled run). To run only the agent-enabled JVM use the `-SkipNoAgent` switch.
 
+ExecutionPolicy bypass (exact commands)
+
+- From PowerShell (recommended):
+
+  powershell -NoProfile -ExecutionPolicy Bypass -File .\run.ps1
+
+- Run only the agent-enabled JVM:
+
+  powershell -NoProfile -ExecutionPolicy Bypass -File .\run.ps1 -SkipNoAgent
+
+- Set BrowserStack env vars inline and run (one-liner):
+
+  powershell -NoProfile -ExecutionPolicy Bypass -Command "$env:BROWSERSTACK_USERNAME='your_user'; $env:BROWSERSTACK_ACCESS_KEY='your_key'; .\run.ps1 -SkipNoAgent"
+
+- From cmd.exe (example):
+
+  powershell -NoProfile -ExecutionPolicy Bypass -File "%CD%\\run.ps1"
+
 Examples
 
 - Run both sanity + agent runs (default):
