@@ -37,15 +37,13 @@ if (-not (Test-Path cp.txt)) { Write-Error "cp.txt not created by Maven"; exit 1
 $cp = Get-Content -Raw -Path cp.txt
 Write-Host "--- cp.txt length: $($cp.Length) ---"
 
-# prefer wildcard lib if target\lib exists and contains jars
-if ((Test-Path 'target\lib' -PathType Container) -and (Get-ChildItem 'target\lib' -Filter '*.jar' -Recurse -File | Select-Object -First 1)) {
-    $cpLine = 'target\classes;target\lib\*'
-    Write-Host "Using wildcard classpath: $cpLine"
-} else {
-    # use mvn-produced cp (already Windows ; separated)
-    $cpLine = "target\classes;$cp"
-    Write-Host "Using explicit classpath length: $($cpLine.Length)"
-}
+# use explicit mvn-produced classpath (match mac behavior) instead of wildcard to avoid ordering/duplicate issues
+$cp = $cp.Trim()
+$cpLine = "target\classes;$cp"
+Write-Host "Using explicit classpath length: $($cpLine.Length)"
+# warn if browserstack sdk appears multiple times on the classpath
+$bsEntries = $cpLine -split ';' | Where-Object { $_ -match 'browserstack-java-sdk' }
+if ($bsEntries.Count -gt 1) { Write-Host "WARNING: browserstack-java-sdk appears multiple times on classpath:`n$($bsEntries -join "`n")" }
 
 # create ASCII args.txt
 $argsPath = Join-Path (Get-Location) 'args.txt'
