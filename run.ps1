@@ -15,12 +15,32 @@ Write-Host "Current dir: $(Get-Location)"
 Write-Host "USERPROFILE: $env:USERPROFILE"
 
 # find java on PATH or common install locations
-$java = (Get-Command java -ErrorAction SilentlyContinue).Source
+$java = $null
+# prefer JAVA_HOME if provided
+if ($env:JAVA_HOME) {
+    $candidate = Join-Path $env:JAVA_HOME 'bin\java.exe'
+    if (Test-Path $candidate) {
+        $java = $candidate
+        Write-Host "Using java from JAVA_HOME: $java"
+    } else {
+        Write-Host "JAVA_HOME is set but $candidate not found"
+    }
+}
+
+# next, try java on PATH
+if (-not $java) {
+    $cmd = Get-Command java -ErrorAction SilentlyContinue
+    if ($cmd) { $java = $cmd.Source; Write-Host "Found java on PATH: $java" }
+}
+
+# fallback to common install locations if still not found
 if (-not $java) {
     $possible = @("C:\\Program Files\\Java\\jdk-17\\bin\\java.exe","C:\\Program Files\\OpenJDK\\jdk-17\\bin\\java.exe","C:\\Users\\Administrator\\Downloads\\openjdk-17.0.0.1+2_windows-x64_bin\\jdk-17.0.0.1\\bin\\java.exe")
     $java = $possible | Where-Object { Test-Path $_ } | Select-Object -First 1
+    if ($java) { Write-Host "Using java from known location: $java" }
 }
-if (-not $java) { Write-Error "java not found on PATH and no common JDK found. Install JDK17 or set java on PATH."; exit 1 }
+
+if (-not $java) { Write-Error "java not found via JAVA_HOME, PATH or common locations. Install JDK17 or set java on PATH or set JAVA_HOME."; exit 1 }
 Write-Host "Using java: $java"
 
 # find BrowserStack SDK jar in local Maven repo
