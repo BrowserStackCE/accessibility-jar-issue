@@ -1,5 +1,12 @@
 # Run Cucumber with BrowserStack javaagent using an args file (PowerShell)
 # Usage: Open PowerShell, cd to project root and run: .\run.ps1
+# Usage:
+#   .\run.ps1                # runs both no-agent (sanity) and agent runs (default)
+#   .\run.ps1 -SkipNoAgent   # run only the agent-enabled JVM
+
+param(
+    [switch]$SkipNoAgent
+)
 
 $ErrorActionPreference = 'Stop'
 
@@ -62,24 +69,28 @@ Set-Content -Path $argsPath -Value $lines -Encoding ascii
 Write-Host "Wrote $argsPath (len $((Get-Content $argsPath -Raw).Length))"
 
 # run no-agent test to validate classpath & main
-$noAgentPath = Join-Path (Get-Location) 'args-noagent.txt'
-(Get-Content $argsPath) | Where-Object { $_ -notmatch '^-javaagent' } | Set-Content $noAgentPath -Encoding ascii
-Write-Host "Running no-agent test... (logs -> run-noagent.log)"
-# temporarily allow non-terminating native command failures so Java stderr doesn't stop the script
-$oldErrorAction = $ErrorActionPreference
-$ErrorActionPreference = 'Continue'
-try {
-    $noAgentArgs = @('-cp', $cpLine, 'com.browserstack.tests.RunCucumberTest')
-    Write-Host "Invoking Java (no-agent) with args: $($noAgentArgs -join ' ')"
-    & $java @noAgentArgs 2>&1 | Tee-Object run-noagent.log
-} catch [System.Exception] {
-    # log the exception but continue so we can inspect logs and exit code
-    Write-Host "Java process raised an exception: $($_.Exception.Message)"
-} finally {
-    $ErrorActionPreference = $oldErrorAction
+if (-not $SkipNoAgent) {
+    $noAgentPath = Join-Path (Get-Location) 'args-noagent.txt'
+    (Get-Content $argsPath) | Where-Object { $_ -notmatch '^-javaagent' } | Set-Content $noAgentPath -Encoding ascii
+    Write-Host "Running no-agent test... (logs -> run-noagent.log)"
+    # temporarily allow non-terminating native command failures so Java stderr doesn't stop the script
+    $oldErrorAction = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        $noAgentArgs = @('-cp', $cpLine, 'com.browserstack.tests.RunCucumberTest')
+        Write-Host "Invoking Java (no-agent) with args: $($noAgentArgs -join ' ')"
+        & $java @noAgentArgs 2>&1 | Tee-Object run-noagent.log
+    } catch [System.Exception] {
+        # log the exception but continue so we can inspect logs and exit code
+        Write-Host "Java process raised an exception: $($_.Exception.Message)"
+    } finally {
+        $ErrorActionPreference = $oldErrorAction
+    }
+    $noAgentExit = $LASTEXITCODE
+    Write-Host "no-agent exit code: $noAgentExit"
+} else {
+    Write-Host "Skipping no-agent run (SkipNoAgent specified)"
 }
-$noAgentExit = $LASTEXITCODE
-Write-Host "no-agent exit code: $noAgentExit"
 
 # run agent-enabled JVM
 Write-Host "Running agent-enabled JVM... (logs -> run-agent.log)"
