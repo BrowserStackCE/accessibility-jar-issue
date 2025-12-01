@@ -38,7 +38,7 @@ $cp = Get-Content -Raw -Path cp.txt
 Write-Host "--- cp.txt length: $($cp.Length) ---"
 
 # prefer wildcard lib if target\lib exists and contains jars
-if (Test-Path 'target\lib' -PathType Container -and (Get-ChildItem 'target\lib' -Filter '*.jar' -Recurse -File | Select-Object -First 1)) {
+if ((Test-Path 'target\lib' -PathType Container) -and (Get-ChildItem 'target\lib' -Filter '*.jar' -Recurse -File | Select-Object -First 1)) {
     $cpLine = 'target\classes;target\lib\*'
     Write-Host "Using wildcard classpath: $cpLine"
 } else {
