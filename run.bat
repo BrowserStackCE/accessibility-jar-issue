@@ -55,16 +55,28 @@ echo Final CLASSPATH (truncated): %CLASSPATH:~0,200%...
 rem Verify java is available
 where java 2>nul || echo WARNING: 'java' not found on PATH - java must be on PATH to run the app
 
-echo About to run java with -javaagent
-echo java -javaagent:"%BROWSERSTACK_JAR%" -Dcucumber.publish.quiet=true -cp "%CLASSPATH%" com.browserstack.tests.RunCucumberTest
+echo Building Java argfile to avoid command-line length limits
+if exist args.txt del /f /q args.txt
 
-rem Run the app with the BrowserStack javaagent
-java -javaagent:"%BROWSERSTACK_JAR%" -Dcucumber.publish.quiet=true -cp "%CLASSPATH%" com.browserstack.tests.RunCucumberTest
+echo -javaagent:"%BROWSERSTACK_JAR%">>args.txt
+echo -Dcucumber.publish.quiet=true>>args.txt
+echo -cp "%CLASSPATH%">>args.txt
+echo com.browserstack.tests.RunCucumberTest>>args.txt
+echo --- args.txt contents ---
+type args.txt
+echo --- end args.txt ---
+
+echo About to run: java @args.txt
+
+rem Run java using the argfile so long classpaths are supported
+java @args.txt
 if errorlevel 1 (
   echo ERROR: java process exited with code %ERRORLEVEL%
 ) else (
   echo java finished successfully
 )
+
+rem optional: del /f /q args.txt
 
 echo ==== run.bat finished ====
 pause
