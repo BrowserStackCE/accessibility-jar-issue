@@ -71,7 +71,9 @@ Write-Host "Running no-agent test... (logs -> run-noagent.log)"
 $oldErrorAction = $ErrorActionPreference
 $ErrorActionPreference = 'Continue'
 try {
-    & $java -cp "$cpLine" com.browserstack.tests.RunCucumberTest 2>&1 | Tee-Object run-noagent.log
+    $noAgentArgs = @('-cp', $cpLine, 'com.browserstack.tests.RunCucumberTest')
+    Write-Host "Invoking Java (no-agent) with args: $($noAgentArgs -join ' ')"
+    & $java @noAgentArgs 2>&1 | Tee-Object run-noagent.log
 } catch [System.Exception] {
     # log the exception but continue so we can inspect logs and exit code
     Write-Host "Java process raised an exception: $($_.Exception.Message)"
@@ -89,7 +91,18 @@ $oldErrorAction = $ErrorActionPreference
 $ErrorActionPreference = 'Continue'
 try {
     $argsConfigPath = (Join-Path (Get-Location) 'browserstack.yml')
-    & $java -javaagent:"$BROWSERSTACK_JAR" -Dbrowserstack.config="$argsConfigPath" -Dbrowserstack.framework=selenium -Dbrowserstack.accessibility=true -Dcucumber.publish.quiet=true -cp "$cpLine" com.browserstack.tests.RunCucumberTest 2>&1 | Tee-Object run-agent.log
+    # build explicit argument array to avoid PowerShell token-splitting issues
+    $agentArgs = @(
+        "-javaagent:$BROWSERSTACK_JAR",
+        "-Dbrowserstack.config=$argsConfigPath",
+        "-Dbrowserstack.framework=selenium",
+        "-Dbrowserstack.accessibility=true",
+        "-Dcucumber.publish.quiet=true",
+        '-cp', $cpLine,
+        'com.browserstack.tests.RunCucumberTest'
+    )
+    Write-Host "Invoking Java (agent) with args: $($agentArgs -join ' ')"
+    & $java @agentArgs 2>&1 | Tee-Object run-agent.log
 } catch [System.Exception] {
     Write-Host "Java agent run raised an exception: $($_.Exception.Message)"
 } finally {
