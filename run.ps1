@@ -56,7 +56,7 @@ $lines += "-Dbrowserstack.config=`"$(Join-Path (Get-Location) 'browserstack.yml'
 $lines += "-Dbrowserstack.framework=selenium"
 $lines += "-Dbrowserstack.accessibility=true"
 # temporary stability flag — remove when CLI fixed
-$lines += "-Dbrowserstack.disableCli=true"
+#$lines += "-Dbrowserstack.disableCli=true"
 $lines += "-Dcucumber.publish.quiet=true"
 $lines += "-cp `"$cpLine`""
 $lines += "com.browserstack.tests.RunCucumberTest"
