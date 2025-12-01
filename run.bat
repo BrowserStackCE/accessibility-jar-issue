@@ -21,21 +21,22 @@ if "%BROWSERSTACK_JAR%"=="" (
 )
 echo Found BROWSERSTACK_JAR: "%BROWSERSTACK_JAR%"
 
+rem Remove any existing cp.txt so mvn will recreate it (avoids "Skipped writing" confusion)
+if exist cp.txt (
+  del /f /q cp.txt
+  echo Deleted previous cp.txt
+)
+
 rem Resolve dependency classpath into a temporary file (Windows format uses ; separators)
 echo Running: mvn dependency:build-classpath -Dmdep.outputFile=cp.txt
 call mvn dependency:build-classpath -Dmdep.outputFile=cp.txt
-if errorlevel 1 (
-  echo ERROR: mvn dependency:build-classpath failed (is mvn on PATH?)
-  where mvn 2>nul || echo 'where mvn' returned no result
-  pause
-  exit /b 1
-)
 
 if not exist cp.txt (
   echo ERROR: cp.txt not created by mvn. Check mvn output.
   pause
   exit /b 1
 )
+
 echo --- cp.txt contents ---
 type cp.txt
 echo --- end cp.txt ---
@@ -50,6 +51,9 @@ if "%DEP_CLASSPATH%"=="" (
 set "CLASSPATH=target\classes;%DEP_CLASSPATH%"
 
 echo Final CLASSPATH (truncated): %CLASSPATH:~0,200%...
+
+rem Verify java is available
+where java 2>nul || echo WARNING: 'java' not found on PATH - java must be on PATH to run the app
 
 echo About to run java with -javaagent
 echo java -javaagent:"%BROWSERSTACK_JAR%" -Dcucumber.publish.quiet=true -cp "%CLASSPATH%" com.browserstack.tests.RunCucumberTest
