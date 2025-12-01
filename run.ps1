@@ -67,12 +67,15 @@ Write-Host "Wrote $argsPath (len $((Get-Content $argsPath -Raw).Length))"
 $noAgentPath = Join-Path (Get-Location) 'args-noagent.txt'
 (Get-Content $argsPath) | Where-Object { $_ -notmatch '^-javaagent' } | Set-Content $noAgentPath -Encoding ascii
 Write-Host "Running no-agent test... (logs -> run-noagent.log)"
-& $java "@${noAgentPath}" 2>&1 | Tee-Object run-noagent.log
+# run directly with explicit classpath to avoid argfile parsing issues
+& $java -cp "$cpLine" com.browserstack.tests.RunCucumberTest 2>&1 | Tee-Object run-noagent.log
 Write-Host "no-agent exit code: $LASTEXITCODE"
 
 # run agent-enabled JVM
 Write-Host "Running agent-enabled JVM... (logs -> run-agent.log)"
-& $java "@${argsPath}" 2>&1 | Tee-Object run-agent.log
+# run directly with explicit -javaagent and classpath (keeps behavior consistent)
+$argsConfigPath = (Join-Path (Get-Location) 'browserstack.yml')
+& $java -javaagent:"$BROWSERSTACK_JAR" -Dbrowserstack.config="$argsConfigPath" -Dbrowserstack.framework=selenium -Dbrowserstack.accessibility=true -Dcucumber.publish.quiet=true -cp "$cpLine" com.browserstack.tests.RunCucumberTest 2>&1 | Tee-Object run-agent.log
 Write-Host "agent exit code: $LASTEXITCODE"
 
 # helpful hints if agent fails due to CLI
