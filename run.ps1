@@ -67,20 +67,40 @@ Write-Host "Wrote $argsPath (len $((Get-Content $argsPath -Raw).Length))"
 $noAgentPath = Join-Path (Get-Location) 'args-noagent.txt'
 (Get-Content $argsPath) | Where-Object { $_ -notmatch '^-javaagent' } | Set-Content $noAgentPath -Encoding ascii
 Write-Host "Running no-agent test... (logs -> run-noagent.log)"
-# run directly with explicit classpath to avoid argfile parsing issues
-& $java -cp "$cpLine" com.browserstack.tests.RunCucumberTest 2>&1 | Tee-Object run-noagent.log
-Write-Host "no-agent exit code: $LASTEXITCODE"
+# temporarily allow non-terminating native command failures so Java stderr doesn't stop the script
+$oldErrorAction = $ErrorActionPreference
+$ErrorActionPreference = 'Continue'
+try {
+    & $java -cp "$cpLine" com.browserstack.tests.RunCucumberTest 2>&1 | Tee-Object run-noagent.log
+} catch [System.Exception] {
+    # log the exception but continue so we can inspect logs and exit code
+    Write-Host "Java process raised an exception: $($_.Exception.Message)"
+} finally {
+    $ErrorActionPreference = $oldErrorAction
+}
+$noAgentExit = $LASTEXITCODE
+Write-Host "no-agent exit code: $noAgentExit"
 
 # run agent-enabled JVM
 Write-Host "Running agent-enabled JVM... (logs -> run-agent.log)"
 # run directly with explicit -javaagent and classpath (keeps behavior consistent)
-$argsConfigPath = (Join-Path (Get-Location) 'browserstack.yml')
-& $java -javaagent:"$BROWSERSTACK_JAR" -Dbrowserstack.config="$argsConfigPath" -Dbrowserstack.framework=selenium -Dbrowserstack.accessibility=true -Dcucumber.publish.quiet=true -cp "$cpLine" com.browserstack.tests.RunCucumberTest 2>&1 | Tee-Object run-agent.log
-Write-Host "agent exit code: $LASTEXITCODE"
+# temporarily allow non-terminating native command failures for the agent run as well
+$oldErrorAction = $ErrorActionPreference
+$ErrorActionPreference = 'Continue'
+try {
+    $argsConfigPath = (Join-Path (Get-Location) 'browserstack.yml')
+    & $java -javaagent:"$BROWSERSTACK_JAR" -Dbrowserstack.config="$argsConfigPath" -Dbrowserstack.framework=selenium -Dbrowserstack.accessibility=true -Dcucumber.publish.quiet=true -cp "$cpLine" com.browserstack.tests.RunCucumberTest 2>&1 | Tee-Object run-agent.log
+} catch [System.Exception] {
+    Write-Host "Java agent run raised an exception: $($_.Exception.Message)"
+} finally {
+    $ErrorActionPreference = $oldErrorAction
+}
+$agentExit = $LASTEXITCODE
+Write-Host "agent exit code: $agentExit"
 
 # helpful hints if agent fails due to CLI
-if ($LASTEXITCODE -ne 0) {
-    Write-Host "If you see SdkCLI initialization errors, try: (1) delete $env:USERPROFILE\.browserstack\cli to force re-download, or (2) keep -Dbrowserstack.disableCli=true as a temporary workaround."
+if ($agentExit -ne 0) {
+    Write-Host "If you see SdkCLI initialization errors, try: (1) delete $env:USERPROFILE\\.browserstack\\cli to force re-download, or (2) keep -Dbrowserstack.disableCli=true as a temporary workaround."
 }
 
-exit $LASTEXITCODE
+exit $agentExit
