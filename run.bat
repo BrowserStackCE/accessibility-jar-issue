@@ -23,7 +23,7 @@ echo Found BROWSERSTACK_JAR: "%BROWSERSTACK_JAR%"
 
 rem Resolve dependency classpath into a temporary file (Windows format uses ; separators)
 echo Running: mvn dependency:build-classpath -Dmdep.outputFile=cp.txt
-mvn dependency:build-classpath -Dmdep.outputFile=cp.txt
+call mvn dependency:build-classpath -Dmdep.outputFile=cp.txt
 if errorlevel 1 (
   echo ERROR: mvn dependency:build-classpath failed (is mvn on PATH?)
   where mvn 2>nul || echo 'where mvn' returned no result
