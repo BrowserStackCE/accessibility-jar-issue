@@ -55,20 +55,22 @@ echo Final CLASSPATH (truncated): %CLASSPATH:~0,200%...
 rem Verify java is available
 where java 2>nul || echo WARNING: 'java' not found on PATH - java must be on PATH to run the app
 
-echo Building Java argfile to avoid command-line length limits (using PowerShell writer)
+echo Building Java argfile to avoid command-line length limits (using cmd writer)
 if exist args.txt del /f /q args.txt
+if exist __cp_line.tmp del /f /q __cp_line.tmp
 
-:: Use PowerShell to read cp.txt as raw and write args.txt with one long -cp line (avoids cmd expansion limits)
-:: Note: this requires PowerShell available on the system (Windows default)
-powershell -NoProfile -Command "
-  $cp = Get-Content -Raw -Path 'cp.txt';
-  $agent = '-javaagent:\"' + '%BROWSERSTACK_JAR%' + '\"';
-  $quiet = '-Dcucumber.publish.quiet=true';
-  $cpLine = '-cp \"' + $cp + '\"';
-  $main = 'com.browserstack.tests.RunCucumberTest';
-  Set-Content -Path 'args.txt' -Value ($agent + [Environment]::NewLine + $quiet + [Environment]::NewLine + $cpLine + [Environment]::NewLine + $main) -Encoding ASCII
-"
+echo -javaagent:"%BROWSERSTACK_JAR%" > args.txt
+echo -Dcucumber.publish.quiet=true >> args.txt
 
+rem Build a single -cp line by writing the prefix, appending cp.txt, then the closing quote
+<nul set /p =-cp " > __cp_line.tmp
+type cp.txt >> __cp_line.tmp
+<nul set /p =" >> __cp_line.tmp
+
+type __cp_line.tmp >> args.txt
+del /f /q __cp_line.tmp 2>nul
+
+echo com.browserstack.tests.RunCucumberTest >> args.txt
 echo --- args.txt contents (first 500 chars shown) ---
 type args.txt | more
 echo --- end args.txt ---
