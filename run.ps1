@@ -72,6 +72,21 @@ Write-Host "Using explicit classpath length: $($cpLine.Length)"
 $bsEntries = $cpLine -split ';' | Where-Object { $_ -match 'browserstack-java-sdk' }
 if ($bsEntries.Count -gt 1) { Write-Host "WARNING: browserstack-java-sdk appears multiple times on classpath:`n$($bsEntries -join "`n")" }
 
+# If this environment is a deployed machine (no target/classes), prefer a shaded jar if present
+$useJarMode = $false
+$appJar = $null
+$shaded = Get-ChildItem -Path (Join-Path (Get-Location) 'target') -Filter '*-jar-with-dependencies.jar' -File -ErrorAction SilentlyContinue | Select-Object -First 1
+if ($shaded) {
+    $useJarMode = $true
+    $appJar = $shaded.FullName
+    Write-Host "Found shaded JAR, switching to jar mode: $appJar"
+} else {
+    # if no shaded jar and target\classes doesn't exist, warn the user
+    if (-not (Test-Path 'target\classes')) {
+        Write-Host "NOTICE: target\classes not found and no shaded jar present. Script will attempt to use the explicit Maven classpath which may not exist on deployed machines."
+    }
+}
+
 # create ASCII args.txt
 $argsPath = Join-Path (Get-Location) 'args.txt'
 if (Test-Path $argsPath) { Remove-Item -Force $argsPath }
@@ -97,7 +112,11 @@ if (-not $SkipNoAgent) {
     $oldErrorAction = $ErrorActionPreference
     $ErrorActionPreference = 'Continue'
     try {
-        $noAgentArgs = @('-cp', $cpLine, 'com.browserstack.tests.RunCucumberTest')
+        if ($useJarMode) {
+            $noAgentArgs = @('-Dcucumber.publish.quiet=true','-jar', $appJar)
+        } else {
+            $noAgentArgs = @('-cp', $cpLine, 'com.browserstack.tests.RunCucumberTest')
+        }
         Write-Host "Invoking Java (no-agent) with args: $($noAgentArgs -join ' ')"
         & $java @noAgentArgs 2>&1 | Tee-Object run-noagent.log
     } catch [System.Exception] {
@@ -121,15 +140,26 @@ $ErrorActionPreference = 'Continue'
 try {
     $argsConfigPath = (Join-Path (Get-Location) 'browserstack.yml')
     # build explicit argument array to avoid PowerShell token-splitting issues
-    $agentArgs = @(
-        "-javaagent:$BROWSERSTACK_JAR",
-        "-Dbrowserstack.config=$argsConfigPath",
-        "-Dbrowserstack.framework=selenium",
-        "-Dbrowserstack.accessibility=true",
-        "-Dcucumber.publish.quiet=true",
-        '-cp', $cpLine,
-        'com.browserstack.tests.RunCucumberTest'
-    )
+    if ($useJarMode) {
+        $agentArgs = @(
+            "-javaagent:$BROWSERSTACK_JAR",
+            "-Dbrowserstack.config=$argsConfigPath",
+            "-Dbrowserstack.framework=selenium",
+            "-Dbrowserstack.accessibility=true",
+            "-Dcucumber.publish.quiet=true",
+            '-jar', $appJar
+        )
+    } else {
+        $agentArgs = @(
+            "-javaagent:$BROWSERSTACK_JAR",
+            "-Dbrowserstack.config=$argsConfigPath",
+            "-Dbrowserstack.framework=selenium",
+            "-Dbrowserstack.accessibility=true",
+            "-Dcucumber.publish.quiet=true",
+            '-cp', $cpLine,
+            'com.browserstack.tests.RunCucumberTest'
+        )
+    }
     Write-Host "Invoking Java (agent) with args: $($agentArgs -join ' ')"
     & $java @agentArgs 2>&1 | Tee-Object run-agent.log
 } catch [System.Exception] {
