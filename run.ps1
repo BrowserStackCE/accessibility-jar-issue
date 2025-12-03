@@ -113,7 +113,11 @@ if (-not $SkipNoAgent) {
     $ErrorActionPreference = 'Continue'
     try {
         if ($useJarMode) {
-            $noAgentArgs = @('-Dcucumber.publish.quiet=true','-jar', $appJar)
+            # run fat-jar on the classpath (avoids needing Main-Class in manifest)
+            Write-Host "Jar-mode: running app jar on -cp with main class (avoids missing Main-Class manifest)"
+            # Warn about possible duplicate SDK bundled inside shaded jar
+            Write-Host "NOTE: shaded jar may contain bundled dependencies (including BrowserStack SDK). If you see duplicate SLF4J bindings, rebuild the shaded jar excluding browserstack-java-sdk or remove duplicate copies from ~/.m2."
+            $noAgentArgs = @('-Dcucumber.publish.quiet=true','-cp', $appJar, 'com.browserstack.tests.RunCucumberTest')
         } else {
             $noAgentArgs = @('-cp', $cpLine, 'com.browserstack.tests.RunCucumberTest')
         }
@@ -147,7 +151,8 @@ try {
             "-Dbrowserstack.framework=selenium",
             "-Dbrowserstack.accessibility=true",
             "-Dcucumber.publish.quiet=true",
-            '-jar', $appJar
+            '-cp', $appJar,
+            'com.browserstack.tests.RunCucumberTest'
         )
     } else {
         $agentArgs = @(
