@@ -18,17 +18,17 @@ Write-Host "Found BROWSERSTACK_JAR: $BROWSERSTACK_JAR"
 
 # Build classpath using Maven
 Write-Host "Building classpath with Maven..."
-$tempFile = [System.IO.Path]::GetTempFileName()
+$cpTempFile = [System.IO.Path]::GetTempFileName()
 try {
-    & mvn dependency:build-classpath "-Dmdep.outputFile=$tempFile" -q 2>&1 | Out-Null
+    & mvn dependency:build-classpath "-Dmdep.outputFile=$cpTempFile" -q 2>&1 | Out-Null
     if ($LASTEXITCODE -ne 0) {
         Write-Error "Failed to build classpath. Exit code: $LASTEXITCODE"
         exit 1
     }
-    $cpOutput = Get-Content $tempFile -Raw
+    $cpOutput = Get-Content $cpTempFile -Raw
     $cpOutput = $cpOutput.Trim()
 } finally {
-    Remove-Item $tempFile -ErrorAction SilentlyContinue
+    Remove-Item $cpTempFile -ErrorAction SilentlyContinue
 }
 $CLASSPATH = "target\classes;$cpOutput"
 Write-Host "Classpath length: $($CLASSPATH.Length)"
@@ -36,16 +36,18 @@ Write-Host "Classpath length: $($CLASSPATH.Length)"
 # Get absolute path to browserstack.yml
 $configPath = Join-Path (Get-Location) "browserstack.yml"
 
-# Build exec.args string with proper escaping
-$execArgs = "-javaagent:`"$BROWSERSTACK_JAR`" -Dbrowserstack.config=`"$configPath`" -Dbrowserstack.framework=selenium -Dbrowserstack.accessibility=true -Dcucumber.publish.quiet=true -cp `"$CLASSPATH`" com.browserstack.tests.RunCucumberTest"
+# Create argument file to avoid Windows command line length limit
+$argFile = ".\mvn-exec-args.txt"
+$argFileContent = "-javaagent:`"$BROWSERSTACK_JAR`" -Dbrowserstack.config=`"$configPath`" -Dbrowserstack.framework=selenium -Dbrowserstack.accessibility=true -Dcucumber.publish.quiet=true -cp `"$CLASSPATH`" com.browserstack.tests.RunCucumberTest"
+Set-Content -Path $argFile -Value $argFileContent -NoNewline
 
-Write-Host "Running mvn exec:exec..."
-Write-Host "Exec args: $execArgs"
+Write-Host "Running mvn exec:exec with argument file..."
+Write-Host "Argument file: $argFile"
 
-# Run mvn exec:exec
+# Run mvn exec:exec with argument file
 & mvn exec:exec `
     -Dexec.executable="java" `
-    "-Dexec.args=$execArgs"
+    "-Dexec.args=@$argFile"
 
 $exitCode = $LASTEXITCODE
 Write-Host "Exit code: $exitCode"
