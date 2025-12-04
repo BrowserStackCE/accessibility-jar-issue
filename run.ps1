@@ -43,48 +43,78 @@ if (-not $java) {
 if (-not $java) { Write-Error "java not found via JAVA_HOME, PATH or common locations. Install JDK17 or set java on PATH or set JAVA_HOME."; exit 1 }
 Write-Host "Using java: $java"
 
-# find BrowserStack SDK jar in local Maven repo
-$repo = Join-Path $env:USERPROFILE ".m2\repository"
-$bsJar = Get-ChildItem -Path $repo -Filter "*browserstack-java-sdk*.jar" -Recurse -File -ErrorAction SilentlyContinue | Select-Object -First 1
-if (-not $bsJar) { Write-Error "BrowserStack JAR not found under $repo"; exit 1 }
-$BROWSERSTACK_JAR = $bsJar.FullName
-Write-Host "Found BROWSERSTACK_JAR: $BROWSERSTACK_JAR"
+# find BrowserStack SDK jar: prefer ./lib next to app, then fallback to local Maven repo
+$localLibPath = Join-Path (Get-Location) 'lib'
+$localBs = $null
+if (Test-Path $localLibPath) {
+    $localBs = Get-ChildItem -Path $localLibPath -Filter '*browserstack-java-sdk*.jar' -Recurse -File -ErrorAction SilentlyContinue | Select-Object -First 1
+}
+if ($localBs) {
+    $BROWSERSTACK_JAR = $localBs.FullName
+    Write-Host "Found BROWSERSTACK_JAR in ./lib: $BROWSERSTACK_JAR"
+} else {
+    $repo = Join-Path $env:USERPROFILE ".m2\repository"
+    $bsJar = Get-ChildItem -Path $repo -Filter "*browserstack-java-sdk*.jar" -Recurse -File -ErrorAction SilentlyContinue | Select-Object -First 1
+    if (-not $bsJar) { Write-Error "BrowserStack JAR not found under $repo and no ./lib copy present. Place browserstack-java-sdk-<ver>.jar in ./lib or install via Maven."; exit 1 }
+    $BROWSERSTACK_JAR = $bsJar.FullName
+    Write-Host "Found BROWSERSTACK_JAR in local Maven repo: $BROWSERSTACK_JAR"
+}
 
-# ensure fresh cp.txt
-if (Test-Path cp.txt) { Remove-Item -Force cp.txt; Write-Host "Deleted previous cp.txt" }
-
-# run mvn dependency:build-classpath safely using Start-Process
-$mvnCmd = (Get-Command mvn -ErrorAction SilentlyContinue).Source
-if (-not $mvnCmd) { Write-Error "mvn not found on PATH"; exit 1 }
-Write-Host "Running: mvn dependency:build-classpath -Dmdep.outputFile=cp.txt"
-$proc = Start-Process -FilePath $mvnCmd -ArgumentList 'dependency:build-classpath','-Dmdep.outputFile=cp.txt' -NoNewWindow -Wait -PassThru
-if ($proc.ExitCode -ne 0) { Write-Error "mvn dependency:build-classpath failed with exit code $($proc.ExitCode)"; exit $proc.ExitCode }
-if (-not (Test-Path cp.txt)) { Write-Error "cp.txt not created by Maven"; exit 1 }
-
-$cp = Get-Content -Raw -Path cp.txt
-Write-Host "--- cp.txt length: $($cp.Length) ---"
-
-# use explicit mvn-produced classpath (match mac behavior) instead of wildcard to avoid ordering/duplicate issues
-$cp = $cp.Trim()
-$cpLine = "target\classes;$cp"
-Write-Host "Using explicit classpath length: $($cpLine.Length)"
-# warn if browserstack sdk appears multiple times on the classpath
-$bsEntries = $cpLine -split ';' | Where-Object { $_ -match 'browserstack-java-sdk' }
-if ($bsEntries.Count -gt 1) { Write-Host "WARNING: browserstack-java-sdk appears multiple times on classpath:`n$($bsEntries -join "`n")" }
-
-# If this environment is a deployed machine (no target/classes), prefer a shaded jar if present
+# Discover application JAR in common deployment locations and decide jar-mode early
 $useJarMode = $false
 $appJar = $null
-$shaded = Get-ChildItem -Path (Join-Path (Get-Location) 'target') -Filter '*-jar-with-dependencies.jar' -File -ErrorAction SilentlyContinue | Select-Object -First 1
-if ($shaded) {
-    $useJarMode = $true
-    $appJar = $shaded.FullName
-    Write-Host "Found shaded JAR, switching to jar mode: $appJar"
-} else {
-    # if no shaded jar and target\classes doesn't exist, warn the user
-    if (-not (Test-Path 'target\classes')) {
-        Write-Host "NOTICE: target\classes not found and no shaded jar present. Script will attempt to use the explicit Maven classpath which may not exist on deployed machines."
+$searchCandidates = @()
+$searchCandidates += (Join-Path (Get-Location) 'dist\app.jar')
+$searchCandidates += (Join-Path (Get-Location) 'app.jar')
+# any jar-with-dependencies at repo root
+$rootShaded = Get-ChildItem -Path (Get-Location) -Filter '*-jar-with-dependencies.jar' -File -ErrorAction SilentlyContinue | Select-Object -First 1
+if ($rootShaded) { $searchCandidates += $rootShaded.FullName }
+# shaded under target
+$targetShaded = Get-ChildItem -Path (Join-Path (Get-Location) 'target') -Filter '*-jar-with-dependencies.jar' -File -ErrorAction SilentlyContinue | Select-Object -First 1
+if ($targetShaded) { $searchCandidates += $targetShaded.FullName }
+# pick first existing candidate
+$appJar = $searchCandidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+if ($appJar) {
+    Write-Host "Found application JAR candidate: $appJar"
+    # If there's no pom.xml (deployed package), use jar-mode and skip Maven
+    if (-not (Test-Path 'pom.xml')) {
+        $useJarMode = $true
+        $cpLine = $appJar
+        Write-Host "No pom.xml detected and application JAR present; switching to jar-mode and skipping mvn. cpLine=$cpLine"
+    } else {
+        Write-Host "pom.xml detected; will build explicit classpath via Maven unless overridden."
     }
+} else {
+    Write-Host "No application JAR found in deployment locations; script will attempt to build classpath via Maven (requires pom.xml)."
+}
+
+# ensure fresh cp.txt and build classpath only if not in jar-mode
+if (-not $useJarMode) {
+    if (-not (Test-Path 'pom.xml')) {
+        Write-Error "No pom.xml found and no application JAR detected. The script requires either a shaded app JAR (dist/app.jar or target/*-jar-with-dependencies.jar) or a pom.xml to build the classpath."; exit 1
+    }
+    if (Test-Path cp.txt) { Remove-Item -Force cp.txt; Write-Host "Deleted previous cp.txt" }
+
+    # run mvn dependency:build-classpath safely using Start-Process
+    $mvnCmd = (Get-Command mvn -ErrorAction SilentlyContinue).Source
+    if (-not $mvnCmd) { Write-Error "mvn not found on PATH"; exit 1 }
+    Write-Host "Running: mvn dependency:build-classpath -Dmdep.outputFile=cp.txt"
+    $proc = Start-Process -FilePath $mvnCmd -ArgumentList 'dependency:build-classpath','-Dmdep.outputFile=cp.txt' -NoNewWindow -Wait -PassThru
+    if ($proc.ExitCode -ne 0) { Write-Error "mvn dependency:build-classpath failed with exit code $($proc.ExitCode)"; exit $proc.ExitCode }
+    if (-not (Test-Path cp.txt)) { Write-Error "cp.txt not created by Maven"; exit 1 }
+
+    $cp = Get-Content -Raw -Path cp.txt
+    Write-Host "--- cp.txt length: $($cp.Length) ---"
+
+    # use explicit mvn-produced classpath (match mac behavior) instead of wildcard to avoid ordering/duplicate issues
+    $cp = $cp.Trim()
+    $cpLine = "target\classes;$cp"
+    Write-Host "Using explicit classpath length: $($cpLine.Length)"
+    # warn if browserstack sdk appears multiple times on the classpath
+    $bsEntries = $cpLine -split ';' | Where-Object { $_ -match 'browserstack-java-sdk' }
+    if ($bsEntries.Count -gt 1) { Write-Host "WARNING: browserstack-java-sdk appears multiple times on classpath:`n$($bsEntries -join "`n")" }
+} else {
+    Write-Host "Jar-mode active; using cpLine: $cpLine"
 }
 
 # create ASCII args.txt
