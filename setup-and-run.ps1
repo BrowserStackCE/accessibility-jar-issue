@@ -36,18 +36,13 @@ Write-Host "Classpath length: $($CLASSPATH.Length)"
 # Get absolute path to browserstack.yml
 $configPath = Join-Path (Get-Location) "browserstack.yml"
 
-# Create Java argument file (one argument per line) to avoid Windows command line length limit
+# Create Java argument file with only javaagent and classpath (the long parts)
 $argFile = ".\mvn-exec-args.txt"
 Write-Host "Creating argument file: $argFile"
 $argFileContent = @"
 -javaagent:$BROWSERSTACK_JAR
--Dbrowserstack.config=$configPath
--Dbrowserstack.framework=selenium
--Dbrowserstack.accessibility=true
--Dcucumber.publish.quiet=true
 -cp
 $CLASSPATH
-com.browserstack.tests.RunCucumberTest
 "@
 Set-Content -Path $argFile -Value $argFileContent
 
@@ -55,8 +50,5 @@ Write-Host ""
 Write-Host "Argument file created successfully: $argFile"
 Write-Host ""
 Write-Host "Now run the following command:"
-Write-Host "  mvn exec:exec '-Dexec.executable=java' `"-Dexec.args=@$argFile`""
-Write-Host ""
-Write-Host "Or use this syntax:"
-Write-Host "  mvn exec:exec -D exec.executable=java -D exec.args=@$argFile"
+Write-Host "  mvn exec:exec '-Dexec.executable=java' '-Dexec.args=@$argFile -Dbrowserstack.config=$configPath -Dbrowserstack.framework=selenium -Dbrowserstack.accessibility=true -Dcucumber.publish.quiet=true com.browserstack.tests.RunCucumberTest'"
 Write-Host ""
