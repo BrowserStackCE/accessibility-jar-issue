@@ -45,9 +45,7 @@ Write-Host "Running mvn exec:exec with argument file..."
 Write-Host "Argument file: $argFile"
 
 # Run mvn exec:exec with argument file
-& mvn exec:exec `
-    -Dexec.executable="java" `
-    "-Dexec.args=@$argFile"
+& mvn exec:exec -Dexec.executable="java" "-Dexec.args=@$argFile"
 
 $exitCode = $LASTEXITCODE
 Write-Host "Exit code: $exitCode"
