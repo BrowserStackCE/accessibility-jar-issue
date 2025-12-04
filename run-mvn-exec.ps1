@@ -18,10 +18,17 @@ Write-Host "Found BROWSERSTACK_JAR: $BROWSERSTACK_JAR"
 
 # Build classpath using Maven
 Write-Host "Building classpath with Maven..."
-$cpOutput = & mvn dependency:build-classpath -Dmdep.outputFile=/dev/stdout -q 2>&1
-if ($LASTEXITCODE -ne 0) {
-    Write-Error "Failed to build classpath"
-    exit 1
+$tempFile = [System.IO.Path]::GetTempFileName()
+try {
+    & mvn dependency:build-classpath "-Dmdep.outputFile=$tempFile" -q 2>&1 | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        Write-Error "Failed to build classpath. Exit code: $LASTEXITCODE"
+        exit 1
+    }
+    $cpOutput = Get-Content $tempFile -Raw
+    $cpOutput = $cpOutput.Trim()
+} finally {
+    Remove-Item $tempFile -ErrorAction SilentlyContinue
 }
 $CLASSPATH = "target\classes;$cpOutput"
 Write-Host "Classpath length: $($CLASSPATH.Length)"
