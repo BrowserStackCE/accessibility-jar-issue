@@ -44,8 +44,13 @@ Set-Content -Path $argFile -Value $argFileContent -NoNewline
 Write-Host "Running mvn exec:exec with argument file..."
 Write-Host "Argument file: $argFile"
 
-# Run mvn exec:exec with argument file
-& mvn exec:exec -Dexec.executable="java" "-Dexec.args=@$argFile"
+# Run mvn exec:exec with argument file using array to avoid parsing issues
+$mvnArgs = @(
+    'exec:exec',
+    '-Dexec.executable=java',
+    "-Dexec.args=@$argFile"
+)
+& mvn $mvnArgs
 
 $exitCode = $LASTEXITCODE
 Write-Host "Exit code: $exitCode"
